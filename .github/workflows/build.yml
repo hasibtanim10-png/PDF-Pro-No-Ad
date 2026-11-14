@@ -46,6 +46,7 @@ jobs:
             python3 generate_pdf_pro.py
           fi
           sed -i 's/intl: \^0.19.0/intl: any/' pubspec.yaml
+          sed -i "s|import 'package:pdf/pdf.dart';|import 'package:pdf/pdf.dart' hide PdfDocument;|" lib/services/pdf_converter_service.dart
           chmod +x android/gradlew
 
       - name: Verify Package ID and Offline Manifest
