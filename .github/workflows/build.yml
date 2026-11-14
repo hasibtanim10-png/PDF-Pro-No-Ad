@@ -44,6 +44,7 @@ jobs:
           if [ -f "generate_pdf_pro.py" ]; then
             python3 generate_pdf_pro.py
           fi
+          sed -i 's/intl: \^0.19.0/intl: any/' pubspec.yaml
           chmod +x android/gradlew
 
       - name: Verify Package ID and Offline Manifest
