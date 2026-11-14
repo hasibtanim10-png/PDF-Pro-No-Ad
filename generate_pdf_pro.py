@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""
-PDF Pro No Ad (com.comeback.pdfprona) - Complete Project Generator
-Generates all Dart source files, Android configs, pubspec.yaml, tests, and README.md.
-"""
-
 import os
 from pathlib import Path
 
 FILES: dict[str, str] = {}
 
-# ==============================================================================
-# 1. PUBSPEC.YAML
-# ==============================================================================
 FILES["pubspec.yaml"] = """name: pdf_pro_no_ad
 description: Premium offline-first, ad-free Android PDF Reader, Manager, Scanner & Converter.
 publish_to: 'none'
@@ -50,9 +42,6 @@ flutter:
   uses-material-design: true
 """
 
-# ==============================================================================
-# 2. ANDROID CONFIGURATION FILES
-# ==============================================================================
 FILES["android/app/build.gradle"] = """plugins {
     id "com.android.application"
     id "kotlin-android"
@@ -97,7 +86,6 @@ flutter {
 """
 
 FILES["android/app/src/main/AndroidManifest.xml"] = """<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Offline-first privacy: No INTERNET permission requested -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.FLASHLIGHT" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -175,9 +163,6 @@ FILES["android/app/src/main/res/xml/file_paths.xml"] = """<?xml version="1.0" en
 </paths>
 """
 
-# ==============================================================================
-# 3. LOCALIZATION (ENGLISH & BANGLA)
-# ==============================================================================
 FILES["lib/l10n/app_localizations.dart"] = """import 'package:flutter/material.dart';
 
 class AppLocalizations {
@@ -259,9 +244,6 @@ class AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
 }
 """
 
-# ==============================================================================
-# 4. DATA MODELS
-# ==============================================================================
 FILES["lib/models/pdf_document_item.dart"] = """import 'dart:io';
 import 'package:path/path.dart' as p;
 
@@ -309,7 +291,7 @@ FILES["lib/models/bookmark_item.dart"] = """class BookmarkItem {
   final int? id;
   final String filePath;
   final String fileName;
-  final int? pageNumber; // null = whole document bookmark; >=1 = specific page
+  final int? pageNumber;
   final String? label;
   final DateTime createdAt;
 
@@ -395,7 +377,6 @@ enum ScanFilterType {
 }
 
 class NormalizedQuad {
-  /// Normalized coordinates [0.0..1.0] in order: topLeft, topRight, bottomRight, bottomLeft
   final List<Point<double>> corners;
 
   const NormalizedQuad(this.corners);
@@ -423,9 +404,9 @@ class ScannedPage {
   String processedImagePath;
   NormalizedQuad quad;
   ScanFilterType filter;
-  double brightness; // -1.0 to 1.0
-  double contrast; // 0.5 to 2.0
-  int rotationQuarterTurns; // 0, 1, 2, 3
+  double brightness;
+  double contrast;
+  int rotationQuarterTurns;
 
   ScannedPage({
     required this.id,
@@ -440,9 +421,6 @@ class ScannedPage {
 }
 """
 
-# ==============================================================================
-# 5. SQLITE PERSISTENCE DATABASE
-# ==============================================================================
 FILES["lib/database/app_database.dart"] = """import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../models/bookmark_item.dart';
@@ -503,7 +481,6 @@ class AppDatabase {
     return _db!;
   }
 
-  // --- Bookmarks ---
   Future<List<BookmarkItem>> getBookmarks() async {
     final db = await database;
     final rows = await db.query('bookmarks', orderBy: 'created_at DESC');
@@ -546,7 +523,6 @@ class AppDatabase {
     );
   }
 
-  // --- Recycle Bin ---
   Future<List<ManagedEntry>> getBinEntries() async {
     final db = await database;
     final rows = await db.query('recycle_bin', orderBy: 'moved_at DESC');
@@ -563,7 +539,6 @@ class AppDatabase {
     await db.delete('recycle_bin', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Locked Vault ---
   Future<List<ManagedEntry>> getLockedEntries() async {
     final db = await database;
     final rows = await db.query('locked_files', orderBy: 'moved_at DESC');
@@ -580,7 +555,6 @@ class AppDatabase {
     await db.delete('locked_files', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Recent Files ---
   Future<void> recordRecentFile(String filePath) async {
     final db = await database;
     await db.insert(
@@ -602,9 +576,6 @@ class AppDatabase {
 }
 """
 
-# ==============================================================================
-# 6. CORE SERVICES (FILE MANAGER, PDF CONVERTER, SECURITY)
-# ==============================================================================
 FILES["lib/services/file_manager_service.dart"] = """import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -659,7 +630,6 @@ class FileManagerService {
     final appDir = await getAppPdfDirectory();
     final all = <String>{appDir.path, ...saved};
 
-    // Include standard public Download/Documents if accessible under scoped storage
     for (final candidate in [
       '/storage/emulated/0/Download',
       '/storage/emulated/0/Documents',
@@ -725,9 +695,7 @@ class FileManagerService {
             }
           }
         }
-      } catch (_) {
-        // Skip directories restricted by Android scoped storage safely
-      }
+      } catch (_) {}
     }
     return discovered.values.toList();
   }
@@ -885,8 +853,6 @@ class PdfConverterService {
     }
   }
 
-  /// Converts selected 1-based page numbers (or all pages if [pages] is null/empty)
-  /// of [pdfPath] into JPG or PNG files.
   Future<List<String>> convertPdfToImages({
     required String pdfPath,
     required OutputImageFormat format,
@@ -950,7 +916,6 @@ class PdfConverterService {
     }
   }
 
-  /// Combines multiple image files into a single multi-page PDF document.
   Future<String> convertImagesToPdf({
     required List<String> imagePaths,
     required String outputFileName,
@@ -1088,8 +1053,6 @@ class SecurityService {
     }
   }
 
-  /// Moves a PDF into the private app-managed vault directory and hides it
-  /// from standard listings behind PIN/Biometric App Lock.
   Future<void> lockPdfDocument(
     PdfDocumentItem item,
     FileManagerService fileService,
@@ -1153,9 +1116,6 @@ class SecurityService {
 }
 """
 
-# ==============================================================================
-# 7. DOCUMENT SCANNER ENGINE (EDGE DETECTION, HOMOGRAPHY WARP & 6 FILTERS)
-# ==============================================================================
 FILES["lib/scanner/document_processor.dart"] = """import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
@@ -1182,8 +1142,6 @@ class _ProcessRequest {
 }
 
 class DocumentProcessor {
-  /// Automatically detects document boundaries (4 corners) using Sobel gradient
-  /// magnitude analysis and quadrant corner extraction inside a background Isolate.
   static Future<NormalizedQuad> detectDocumentCorners(String imagePath) async {
     final bytes = await File(imagePath).readAsBytes();
     return Isolate.run(() => detectCornersFromBytes(bytes));
@@ -1193,14 +1151,12 @@ class DocumentProcessor {
     final decoded = img.decodeImage(bytes);
     if (decoded == null) return NormalizedQuad.defaultInset();
 
-    // Downsample to max 240px width for fast deterministic edge detection
     const targetW = 240;
     final scale = targetW / decoded.width;
     final targetH = max(60, (decoded.height * scale).round());
     final small = img.copyResize(decoded, width: targetW, height: targetH);
     final gray = img.grayscale(small);
 
-    // Compute Sobel edge magnitudes
     final grad = Float64List(targetW * targetH);
     double sumGrad = 0;
     int count = 0;
@@ -1227,7 +1183,6 @@ class DocumentProcessor {
 
     final threshold = max(45.0, (sumGrad / max(1, count)) * 2.1);
 
-    // Locate extreme strong edge points closest to each of the 4 image corners
     Point<int>? bestTL;
     Point<int>? bestTR;
     Point<int>? bestBR;
@@ -1281,7 +1236,6 @@ class DocumentProcessor {
       Point(bestBL.x / targetW, bestBL.y / targetH),
     ]);
 
-    // Validate area is at least 15% of frame; otherwise fall back to safe inset
     if (_polygonArea(quad.corners) < 0.15) {
       return NormalizedQuad.defaultInset();
     }
@@ -1300,8 +1254,6 @@ class DocumentProcessor {
     return area.abs() / 2.0;
   }
 
-  /// Performs projective perspective transformation (3x3 homography warp),
-  /// rotation, and enhancement filter processing in an Isolate.
   static Future<String> processPage({
     required String rawImagePath,
     required String outputImagePath,
@@ -1329,15 +1281,12 @@ class DocumentProcessor {
     final src = img.decodeImage(req.rawBytes);
     if (src == null) return req.rawBytes;
 
-    // 1. Perspective warp using projective homography
     img.Image warped = perspectiveWarp(src, req.quad);
 
-    // 2. Apply quarter-turn rotation if requested
     if (req.rotationTurns != 0) {
       warped = img.copyRotate(warped, angle: req.rotationTurns * 90);
     }
 
-    // 3. Apply selected document enhancement filter
     final enhanced = applyFilter(
       warped,
       req.filter,
@@ -1348,9 +1297,6 @@ class DocumentProcessor {
     return Uint8List.fromList(img.encodeJpg(enhanced, quality: 92));
   }
 
-  /// Maps the arbitrary quadrilateral [quad] into a straight rectangular image
-  /// by solving the 8-DOF projective homography matrix H (destination -> source)
-  /// and performing bilinear interpolation.
   static img.Image perspectiveWarp(img.Image src, NormalizedQuad quad) {
     final w = src.width.toDouble();
     final h = src.height.toDouble();
@@ -1368,7 +1314,6 @@ class DocumentProcessor {
     int outW = max(topW, bottomW).round().clamp(120, 2400);
     int outH = max(leftH, rightH).round().clamp(120, 3200);
 
-    // Solve H mapping destination rectangle corners -> source quad corners
     final dstPts = [
       const Point(0.0, 0.0),
       Point(outW - 1.0, 0.0),
@@ -1418,8 +1363,6 @@ class DocumentProcessor {
     return top * (1 - fy) + bottom * fy;
   }
 
-  /// Solves the 8x8 linear system for projective homography parameters [h0..h7]
-  /// with h8 = 1.0 using Gaussian elimination with partial pivoting.
   static List<double> computeHomography(
     List<Point<double>> from,
     List<Point<double>> to,
@@ -1474,7 +1417,6 @@ class DocumentProcessor {
 
       case ScanFilterType.blackAndWhite:
         final g = img.grayscale(img.Image.from(input));
-        // Adaptive local contrast & binary thresholding for crisp text
         img.adjustColor(g, contrast: 1.55, brightness: 1.08);
         for (int y = 0; y < g.height; y++) {
           for (int x = 0; x < g.width; x++) {
@@ -1518,9 +1460,6 @@ class DocumentProcessor {
 }
 """
 
-# ==============================================================================
-# 8. CENTRAL STATE PROVIDER
-# ==============================================================================
 FILES["lib/providers/app_provider.dart"] = """import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1707,9 +1646,6 @@ class AppProvider extends ChangeNotifier {
 }
 """
 
-# ==============================================================================
-# 9. REUSABLE WIDGETS
-# ==============================================================================
 FILES["lib/widgets/pin_dialog.dart"] = """import 'package:flutter/material.dart';
 
 Future<String?> showPinPromptDialog(
@@ -2000,9 +1936,6 @@ class PdfListTile extends StatelessWidget {
 }
 """
 
-# ==============================================================================
-# 10. PROFESSIONAL PDF READER (PDFium MULTI-SCRIPT, ZOOM, SEARCH, 3-DOT MENU)
-# ==============================================================================
 FILES["lib/pdf_reader/pdf_reader_screen.dart"] = """import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:provider/provider.dart';
@@ -2116,7 +2049,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
           Expanded(
             child: Stack(
               children: [
-                // PDFium engine natively renders Bengali, Arabic, Urdu, Hindi, Chinese, Japanese, Korean & Latin
                 PdfViewer.file(
                   _doc.path,
                   controller: _controller,
@@ -2402,9 +2334,6 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
 }
 """
 
-# ==============================================================================
-# 11. DOCUMENT SCANNER UI (CAMERA, 4-CORNER CROP, FILTERS & MULTI-PAGE EXPORT)
-# ==============================================================================
 FILES["lib/scanner/crop_filter_screen.dart"] = """import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -2800,9 +2729,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         _cameraReady = true;
       });
       if (_autoCapture) _startAutoCaptureTimer();
-    } catch (_) {
-      // Gallery import remains available even if device camera is unavailable
-    }
+    } catch (_) {}
   }
 
   void _startAutoCaptureTimer() {
@@ -2864,7 +2791,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final procOut = p.join(cacheDir.path, 'scan_proc_$id.jpg');
     await File(sourcePath).copy(rawCopy);
 
-    // Run real Sobel edge detection & 3x3 projective homography warp
     final detectedQuad = await DocumentProcessor.detectDocumentCorners(rawCopy);
     await DocumentProcessor.processPage(
       rawImagePath: rawCopy,
@@ -3150,9 +3076,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
 }
 """
 
-# ==============================================================================
-# 12. CONVERTER, BIN & VAULT SCREENS
-# ==============================================================================
 FILES["lib/screens/converter_screen.dart"] = """import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -3616,9 +3539,6 @@ class VaultScreen extends StatelessWidget {
 }
 """
 
-# ==============================================================================
-# 13. FIVE PRIMARY BOTTOM NAVIGATION SCREENS + MAIN SHELL
-# ==============================================================================
 FILES["lib/screens/home_screen.dart"] = """import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -4356,9 +4276,6 @@ class _MainShellState extends State<MainShell> {
 }
 """
 
-# ==============================================================================
-# 14. MAIN ENTRY POINT & APP LOCK GATE
-# ==============================================================================
 FILES["lib/main.dart"] = """import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -4520,9 +4437,6 @@ class _AppLockScreenState extends State<_AppLockScreen> {
 }
 """
 
-# ==============================================================================
-# 15. AUTOMATED UNIT & WIDGET TESTS
-# ==============================================================================
 FILES["test/widget_test.dart"] = """import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -4537,7 +4451,6 @@ void main() {
   test('Projective homography accurately maps tilted quadrilateral to rectangle', () {
     final src = img.Image(width: 200, height: 200);
     img.fill(src, color: img.ColorRgb8(20, 20, 20));
-    // Paint white document region inside (40,40)-(160,160)
     for (int y = 40; y < 160; y++) {
       for (int x = 40; x < 160; x++) {
         src.setPixelRgb(x, y, 240, 240, 240);
@@ -4592,22 +4505,21 @@ void main() {
 }
 """
 
-# ==============================================================================
-# 16. README.MD
-# ==============================================================================
-FILES["README.md"] = """# PDF Pro No Ad (`com.comeback.pdfprona`)
+FILES["README.md"] = """# PDF Pro No Ad (com.comeback.pdfprona)
 
-A complete, offline-first, ad-free Android PDF Reader, File Manager, CamScanner-style Document Scanner, and PDF/Image Converter built with Flutter and Dart.
+Offline-first, ad-free Android PDF Reader, File Manager, Document Scanner, and PDF Converter built with Flutter and Dart.
+"""
 
-## Key Features
-- **AMOLED Black (`#000000`) & Crimson Red (`#DC143C`) Material 3 UI** with English & Bangla (`বাংলা`) support.
-- **5-Tab Navigation:** Home, Documents, Tools, Me, and Bookmarks.
-- **Multi-Script PDFium Reader:** Smooth vertical scrolling, pinch-to-zoom, page jump HUD, fit-to-width/page, in-document text search, page bookmarks, and single-document 3-dot actions (Share, Bookmark, Rename, Delete, Convert to JPG, Convert to PNG). Supports Bengali, English, Arabic, Urdu, Hindi, Chinese, Japanese, and Korean PDFs.
-- **Real Image-Processing Document Scanner:** Live camera preview, flash, auto-capture, gallery import, Sobel edge detection, draggable 4-corner adjustment, $3 \\times 3$ projective homography perspective correction, 6 enhancement filters (Original, Black & White, Grayscale, Magic Color, Enhanced Document, Custom Brightness/Contrast), and multi-page PDF export.
-- **PDF & Image Converters:** PDF to JPG/PNG (selected or all pages) and multiple Images to PDF with quality and output folder options.
-- **Security & File Management:** SHA-256 salted PIN App Lock, Biometric unlock, Locked File Vault, Recycle Bin with restore/permanent delete, and zero `INTERNET` permission.
 
-## Build & Release APK Instructions
-1. Bootstrap the Android project and Gradle Wrapper:
-   ```bash
-   flutter create --org com.comeback --project-name pdf_pro_no_ad --platforms=android .
+def main() -> None:
+    root = Path(__file__).resolve().parent
+    for rel_path, content in FILES.items():
+        target = root / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content.lstrip("\n"), encoding="utf-8")
+        print(f"Wrote {rel_path}")
+    print(f"\nGenerated {len(FILES)} files successfully.")
+
+
+if __name__ == "__main__":
+    main()
