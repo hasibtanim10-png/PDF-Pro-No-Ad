@@ -65,7 +65,9 @@ jobs:
           fi
 
       - name: Install Flutter Dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          find ~/.pub-cache/hosted/pub.dev/pdfrx-*/lib/src/pdfium -name "pdf_file_cache.dart" -exec sed -i 's/cache\.blockSize/cache!.blockSize/g; s/cache\.read(/cache!.read(/g' {} +
 
       - name: Format Dart Code
         run: dart format lib test
