@@ -17,13 +17,18 @@ task clean(type: Delete) {
     delete rootProject.buildDir
 }
 
-subprojects {
-    afterEvaluate { proj ->
-        if (proj.hasProperty('android')) {
-            proj.android {
-                if (compileSdkVersion < 36) {
-                    compileSdk = 36
-                }
+gradle.beforeProject { project ->
+    project.plugins.withId("com.android.library") {
+        project.android {
+            if (compileSdkVersion < 36) {
+                compileSdk = 36
+            }
+        }
+    }
+    project.plugins.withId("com.android.application") {
+        project.android {
+            if (compileSdkVersion < 36) {
+                compileSdk = 36
             }
         }
     }
