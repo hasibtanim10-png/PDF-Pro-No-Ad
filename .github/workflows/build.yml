@@ -57,6 +57,7 @@ jobs:
           sed -i 's|android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"|android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion"|' android/app/src/main/AndroidManifest.xml
           sed -i 's/intl: \^0.19.0/intl: any/' pubspec.yaml
           sed -i 's/file_picker: \^8.1.4/file_picker: any/' pubspec.yaml
+          find lib -name "*.dart" -exec sed -i 's/FilePicker\.platform\./FilePicker./g' {} +
           sed -i "1i import 'dart:ui';" lib/services/pdf_converter_service.dart
           sed -i "s|import 'package:pdf/pdf.dart';|import 'package:pdf/pdf.dart' hide PdfDocument;|" lib/services/pdf_converter_service.dart
           sed -i 's/backgroundColor: 0xFFFFFFFF/backgroundColor: Color(0xFFFFFFFF)/g' lib/services/pdf_converter_service.dart
