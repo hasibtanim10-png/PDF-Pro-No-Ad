@@ -503,9 +503,7 @@ jobs:
 
       - name: Verify and Copy APK Output
         run: |
-            - name: Verify and Copy APK Output
-        run: |
-          mkdir -p build/app/outputs/flutter-apk
+                mkdir -p build/app/outputs/flutter-apk
           ls -lh build/app/outputs/flutter-apk/
           cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PDF-Pro-No-Ad-v1.0.0.apk
 
