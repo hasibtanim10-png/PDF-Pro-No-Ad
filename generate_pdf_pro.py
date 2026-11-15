@@ -1,4 +1,4 @@
-এটা#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 PDF Pro No Ad (com.comeback.pdfprona) - Complete Project Generator
 Generates all Dart source files, Android configs, pubspec.yaml, tests, and README.md.
