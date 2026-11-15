@@ -45,6 +45,16 @@ jobs:
 
       - name: Generate Project Source & Config Files
         run: |
+          python3 -c '
+          from pathlib import Path
+          import re
+          p = Path("generate_pdf_pro.py")
+          txt = p.read_text(encoding="utf-8")
+          txt = re.sub(r"_selectedPdf\s+Path == null", "_selectedPdfPath == null", txt)
+          txt = re.sub(r"final int vaultBytes;?\s+final int vaultBytes;", "final int vaultBytes;", txt)
+          txt = re.sub(r"final int vaultBytes(?!;)", "final int vaultBytes;", txt)
+          p.write_text(txt, encoding="utf-8")
+          '
           python3 generate_pdf_pro.py
           if [ -f "android/settings.gradle.kts" ]; then
             if ! grep -q "compileSdk = 36" android/settings.gradle.kts; then
