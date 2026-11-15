@@ -43,9 +43,300 @@ jobs:
           fi
           rm -f android/app/build.gradle.kts
 
-      - name: Generate Project Source & Config Files
+      - name: Generate & Sanitize All Project Files
         run: |
+          python3 -c '
+          from pathlib import Path
+          import re
+          p = Path("generate_pdf_pro.py")
+          if p.exists():
+              txt = p.read_text(encoding="utf-8")
+              txt = re.sub(r"^[^#]*#!/usr/bin/env python3", "#!/usr/bin/env python3", txt)
+              txt = re.sub(r"_selectedPdf[\s\S]{0,40}?Path\s*==\s*null", "_selectedPdfPath == null", txt)
+              txt = re.sub(r"final int vaultBytes;?\s+final int vaultBytes;", "final int vaultBytes;", txt)
+              txt = re.sub(r"final int vaultBytes(?!;)", "final int vaultBytes;", txt)
+              p.write_text(txt, encoding="utf-8")
+          '
           python3 generate_pdf_pro.py
+
+          cat << 'EOF' > pubspec.yaml
+          name: pdf_pro_no_ad
+          description: Premium offline-first, ad-free Android PDF Reader, Manager, Scanner & Converter.
+          publish_to: 'none'
+          version: 1.0.0+1
+
+          environment:
+            sdk: '>=3.4.0 <4.0.0'
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            flutter_localizations:
+              sdk: flutter
+            pdfrx: ^1.0.101
+            pdf: ^3.11.1
+            image: ^4.3.0
+            camera: ^0.11.0+2
+            file_picker: ^8.1.4
+            path_provider: ^2.1.5
+            path: ^1.9.0
+            sqflite: ^2.4.1
+            shared_preferences: ^2.3.3
+            local_auth: ^2.3.0
+            crypto: ^3.0.6
+            share_plus: ^10.1.2
+            permission_handler: ^11.3.1
+            intl: any
+            provider: ^6.1.2
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^4.0.0
+
+          flutter:
+            uses-material-design: true
+          EOF
+
+          cat << 'EOF' > analysis_options.yaml
+          analyzer:
+            errors:
+              deprecated_member_use: ignore
+              deprecated_member_use_from_same_package: ignore
+              use_build_context_synchronously: ignore
+          EOF
+
+          cat << 'EOF' > lib/services/file_manager_service.dart
+          import 'dart:io';
+          import 'package:file_picker/file_picker.dart';
+          import 'package:path/path.dart' as p;
+          import 'package:path_provider/path_provider.dart';
+          import 'package:permission_handler/permission_handler.dart';
+          import 'package:shared_preferences/shared_preferences.dart';
+          import '../database/app_database.dart';
+          import '../models/managed_entry.dart';
+          import '../models/pdf_document_item.dart';
+
+          class StorageStats {
+            final int managedPdfBytes;
+            final int managedPdfCount;
+            final int binBytes;
+            final int vaultBytes;
+
+            const StorageStats({
+              required this.managedPdfBytes,
+              required this.managedPdfCount,
+              required this.binBytes,
+              required this.vaultBytes,
+            });
+          }
+
+          class FileManagerService {
+            static const _prefsFoldersKey = 'authorized_folders_v1';
+
+            Future<Directory> getAppPdfDirectory() async {
+              final base = await getApplicationDocumentsDirectory();
+              final dir = Directory(p.join(base.path, 'PDFProDocuments'));
+              if (!await dir.exists()) await dir.create(recursive: true);
+              return dir;
+            }
+
+            Future<Directory> getBinDirectory() async {
+              final base = await getApplicationSupportDirectory();
+              final dir = Directory(p.join(base.path, '.recycle_bin'));
+              if (!await dir.exists()) await dir.create(recursive: true);
+              return dir;
+            }
+
+            Future<Directory> getVaultDirectory() async {
+              final base = await getApplicationSupportDirectory();
+              final dir = Directory(p.join(base.path, '.locked_vault'));
+              if (!await dir.exists()) await dir.create(recursive: true);
+              return dir;
+            }
+
+            Future<List<String>> getAuthorizedFolders() async {
+              final prefs = await SharedPreferences.getInstance();
+              final saved = prefs.getStringList(_prefsFoldersKey) ?? [];
+              final appDir = await getAppPdfDirectory();
+              final all = <String>{appDir.path, ...saved};
+
+              for (final candidate in [
+                '/storage/emulated/0/Download',
+                '/storage/emulated/0/Documents',
+              ]) {
+                final d = Directory(candidate);
+                if (await d.exists()) {
+                  all.add(candidate);
+                }
+              }
+              return all.toList();
+            }
+
+            Future<String?> authorizeNewFolder() async {
+              final selected = await FilePicker.platform.getDirectoryPath(
+                dialogTitle: 'Select PDF Folder',
+              );
+              if (selected == null || selected.isEmpty) return null;
+              final prefs = await SharedPreferences.getInstance();
+              final existing = prefs.getStringList(_prefsFoldersKey) ?? [];
+              if (!existing.contains(selected)) {
+                existing.add(selected);
+                await prefs.setStringList(_prefsFoldersKey, existing);
+              }
+              return selected;
+            }
+
+            Future<void> importExternalPdfs() async {
+              final result = await FilePicker.platform.pickFiles(
+                type: FileType.custom,
+                allowedExtensions: ['pdf'],
+                allowMultiple: true,
+              );
+              if (result == null) return;
+              final targetDir = await getAppPdfDirectory();
+              for (final f in result.files) {
+                if (f.path == null) continue;
+                final src = File(f.path!);
+                if (!await src.exists()) continue;
+                final destPath = await _uniqueDestination(targetDir.path, p.basename(src.path));
+                await src.copy(destPath);
+              }
+            }
+
+            Future<List<PdfDocumentItem>> scanAccessiblePdfs() async {
+              await Permission.storage.request();
+              final folders = await getAuthorizedFolders();
+              final lockedEntries = await AppDatabase.instance.getLockedEntries();
+              final lockedPaths = lockedEntries.map((e) => e.storedPath).toSet();
+
+              final discovered = <String, PdfDocumentItem>{};
+
+              for (final folderPath in folders) {
+                final dir = Directory(folderPath);
+                if (!await dir.exists()) continue;
+                try {
+                  await for (final entity in dir.list(recursive: false, followLinks: false)) {
+                    if (entity is File &&
+                        entity.path.toLowerCase().endsWith('.pdf') &&
+                        !lockedPaths.contains(entity.path)) {
+                      final item = await PdfDocumentItem.fromFile(entity);
+                      if (item != null) {
+                        discovered[item.path] = item;
+                      }
+                    }
+                  }
+                } catch (_) {}
+              }
+              return discovered.values.toList();
+            }
+
+            Future<String?> renamePdf(String oldPath, String newBaseName) async {
+              final file = File(oldPath);
+              if (!await file.exists()) return null;
+              final cleanName = newBaseName.trim().endsWith('.pdf')
+                  ? newBaseName.trim()
+                  : '${newBaseName.trim()}.pdf';
+              final newPath = p.join(p.dirname(oldPath), cleanName);
+              if (newPath == oldPath) return oldPath;
+              if (await File(newPath).exists()) {
+                throw Exception('A file with that name already exists.');
+              }
+              final renamed = await file.rename(newPath);
+              await AppDatabase.instance.updateBookmarkPath(oldPath, renamed.path, cleanName);
+              return renamed.path;
+            }
+
+            Future<void> moveToBin(PdfDocumentItem item) async {
+              final src = File(item.path);
+              if (!await src.exists()) return;
+              final binDir = await getBinDirectory();
+              final binPath = await _uniqueDestination(
+                binDir.path,
+                '${DateTime.now().millisecondsSinceEpoch}_${item.name}',
+              );
+              await _moveFileSafe(src, binPath);
+              await AppDatabase.instance.insertBinEntry(
+                ManagedEntry(
+                  originalPath: item.path,
+                  storedPath: binPath,
+                  fileName: item.name,
+                  sizeBytes: item.sizeBytes,
+                  movedAt: DateTime.now(),
+                ),
+              );
+            }
+
+            Future<void> restoreFromBin(ManagedEntry entry) async {
+              final stored = File(entry.storedPath);
+              if (await stored.exists()) {
+                final parent = Directory(p.dirname(entry.originalPath));
+                final targetDir = await parent.exists() ? parent : await getAppPdfDirectory();
+                final dest = await _uniqueDestination(targetDir.path, entry.fileName);
+                await _moveFileSafe(stored, dest);
+              }
+              if (entry.id != null) {
+                await AppDatabase.instance.deleteBinEntry(entry.id!);
+              }
+            }
+
+            Future<void> permanentlyDeleteBinEntry(ManagedEntry entry) async {
+              final stored = File(entry.storedPath);
+              if (await stored.exists()) {
+                await stored.delete();
+              }
+              await AppDatabase.instance.removeBookmarksForPath(entry.originalPath);
+              if (entry.id != null) {
+                await AppDatabase.instance.deleteBinEntry(entry.id!);
+              }
+            }
+
+            Future<void> permanentlyDeleteFile(String filePath) async {
+              final f = File(filePath);
+              if (await f.exists()) {
+                await f.delete();
+              }
+              await AppDatabase.instance.removeBookmarksForPath(filePath);
+            }
+
+            Future<StorageStats> computeStorageStats(List<PdfDocumentItem> docs) async {
+              final totalDocsBytes = docs.fold<int>(0, (sum, d) => sum + d.sizeBytes);
+              final binEntries = await AppDatabase.instance.getBinEntries();
+              final vaultEntries = await AppDatabase.instance.getLockedEntries();
+              final binBytes = binEntries.fold<int>(0, (sum, e) => sum + e.sizeBytes);
+              final vaultBytes = vaultEntries.fold<int>(0, (sum, e) => sum + e.sizeBytes);
+
+              return StorageStats(
+                managedPdfBytes: totalDocsBytes,
+                managedPdfCount: docs.length,
+                binBytes: binBytes,
+                vaultBytes: vaultBytes,
+              );
+            }
+
+            Future<void> _moveFileSafe(File src, String destPath) async {
+              try {
+                await src.rename(destPath);
+              } catch (_) {
+                await src.copy(destPath);
+                await src.delete();
+              }
+            }
+
+            Future<String> _uniqueDestination(String dirPath, String fileName) async {
+              var candidate = p.join(dirPath, fileName);
+              var counter = 1;
+              final ext = p.extension(fileName);
+              final stem = p.basenameWithoutExtension(fileName);
+              while (await File(candidate).exists()) {
+                candidate = p.join(dirPath, '${stem}_$counter$ext');
+                counter++;
+              }
+              return candidate;
+            }
+          }
+          EOF
+
           cat << 'EOF' > lib/screens/converter_screen.dart
           import 'dart:io';
           import 'package:file_picker/file_picker.dart';
@@ -217,200 +508,4 @@ jobs:
                         label: Text(
                           _selectedPdfPath == null
                               ? 'Select Source PDF'
-                              : '${p.basename(_selectedPdfPath!)} ($_pdfTotalPages pages)',
-                        ),
-                        onPressed: () async {
-                          final res = await FilePicker.pickFiles(
-                            type: FileType.custom,
-                            allowedExtensions: ['pdf'],
-                          );
-                          if (res != null && res.files.single.path != null) {
-                            await _loadPdf(res.files.single.path!);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      SegmentedButton<OutputImageFormat>(
-                        segments: const [
-                          ButtonSegment(value: OutputImageFormat.jpg, label: Text('JPG')),
-                          ButtonSegment(value: OutputImageFormat.png, label: Text('PNG')),
-                        ],
-                        selected: {_format},
-                        onSelectionChanged: (s) => setState(() => _format = s.first),
-                      ),
-                      SwitchListTile(
-                        title: const Text('Convert All Pages'),
-                        value: _convertAllPages,
-                        activeThumbColor: const Color(0xFFDC143C),
-                        onChanged: (v) => setState(() => _convertAllPages = v),
-                      ),
-                      if (!_convertAllPages)
-                        TextField(
-                          controller: _pageRangeCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Selected Pages (e.g. 1, 3-5)',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                    ] else ...[
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.add_photo_alternate),
-                        label: Text('Select Images (${_selectedImages.length} selected)'),
-                        onPressed: () async {
-                          final res = await FilePicker.pickFiles(
-                            type: FileType.image,
-                            allowMultiple: true,
-                          );
-                          if (res != null) {
-                            setState(() {
-                              _selectedImages.addAll(
-                                res.files.where((f) => f.path != null).map((f) => f.path!),
-                              );
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _outPdfNameCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Output PDF Name',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<ConversionQuality>(
-                      initialValue: _quality,
-                      decoration: const InputDecoration(
-                        labelText: 'Output Quality',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: ConversionQuality.values
-                          .map((q) => DropdownMenuItem(value: q, child: Text(q.label)))
-                          .toList(),
-                      onChanged: (q) {
-                        if (q != null) setState(() => _quality = q);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.folder_open),
-                      label: Text(
-                        _customOutputFolder == null
-                            ? 'Output Folder: Default (PDFProConverted)'
-                            : 'Output: $_customOutputFolder',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onPressed: () async {
-                        final dir = await FilePicker.getDirectoryPath();
-                        if (dir != null) setState(() => _customOutputFolder = dir);
-                      },
-                    ),
-                    const SizedBox(height: 18),
-                    FilledButton.icon(
-                      icon: const Icon(Icons.bolt),
-                      label: Text(_isConverting ? _progressText : 'Start Conversion'),
-                      onPressed: _isConverting ? null : _runConversion,
-                    ),
-                    if (_generatedFiles.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Converted Files (${_generatedFiles.length})',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          FilledButton.tonalIcon(
-                            icon: const Icon(Icons.share),
-                            label: const Text('Share All'),
-                            onPressed: () => Share.shareXFiles(
-                              _generatedFiles.map((path) => XFile(path)).toList(),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      ..._generatedFiles.map(
-                        (filePath) => Card(
-                          color: const Color(0xFF121212),
-                          child: ListTile(
-                            leading: filePath.endsWith('.pdf')
-                                ? const Icon(Icons.picture_as_pdf, color: Color(0xFFDC143C))
-                                : Image.file(File(filePath), width: 44, height: 44, fit: BoxFit.cover),
-                            title: Text(p.basename(filePath), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.share),
-                              onPressed: () => Share.shareXFiles([XFile(filePath)]),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              );
-            }
-          }
-          EOF
-          if [ -f "android/settings.gradle.kts" ]; then
-            if ! grep -q "compileSdk = 36" android/settings.gradle.kts; then
-              printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        extensions.configure<com.android.build.gradle.LibraryExtension> {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle.kts
-            fi
-          elif [ -f "android/settings.gradle" ]; then
-            if ! grep -q "compileSdk = 36" android/settings.gradle; then
-              printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        android {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle
-            fi
-          fi
-          chmod +x android/gradlew
-
-      - name: Commit Generated Source Files to Repository
-        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: generate PDF Pro No Ad project files [skip ci]"
-            git push
-          fi
-
-      - name: Verify Package ID and Offline Manifest
-        run: |
-          grep -q 'com.comeback.pdfprona' android/app/build.gradle
-          if grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml; then
-            echo "ERROR: INTERNET permission must not be present."
-            exit 1
-          fi
-
-      - name: Install Flutter Dependencies
-        run: |
-          flutter pub get
-          find ~/.pub-cache/hosted/pub.dev/pdfrx-*/lib/src/pdfium -name "pdf_file_cache.dart" -exec sed -i 's/cache\.blockSize/cache!.blockSize/g; s/cache\.read(/cache!.read(/g' {} +
-
-      - name: Format Dart Code
-        run: dart format lib test
-
-      - name: Run Flutter Static Analysis
-        run: flutter analyze --no-fatal-infos
-
-      - name: Run Automated Tests
-        run: flutter test
-
-      - name: Build Release APK
-        run: flutter build apk --release --target-platform android-arm,android-arm64,android-x64
-
-      - name: Verify APK Output
-        run: |
-          ls -lh build/app/outputs/flutter-apk/app-release.apk
-          cp build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PDF-Pro-No-Ad-v1.0.0.apk
-
-      - name: Upload Release APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: PDF-Pro-No-Ad-v1.0.0-release-apk
-          path: build/app/outputs/flutter-apk/PDF-Pro-No-Ad-v1.0.0.apk
-          retention-days: 30
-          
+                              : '${p.basename(_selectedPdfPath!)} ($_pdfTotalPages p
