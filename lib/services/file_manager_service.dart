@@ -12,8 +12,7 @@ class StorageStats {
   final int managedPdfBytes;
   final int managedPdfCount;
   final int binBytes;
-  final int vaultBytes
-    final int vaultBytes;
+  final int vaultBytes;
 
   const StorageStats({
     required this.managedPdfBytes,
