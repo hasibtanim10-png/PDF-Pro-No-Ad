@@ -48,14 +48,15 @@ jobs:
           rm -f android/app/build.gradle.kts
           sed -i 's/compileSdk = 34/compileSdk = 36/' android/app/build.gradle
           sed -i 's/targetSdk = 34/targetSdk = 35/' android/app/build.gradle
-          if [ -f "android/build.gradle.kts" ]; then
-            printf '\nsubprojects {\n    plugins.withId("com.android.library") {\n        extensions.configure<com.android.build.gradle.LibraryExtension> {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/build.gradle.kts
-          elif [ -f "android/build.gradle" ]; then
-            printf '\nsubprojects {\n    plugins.withId("com.android.library") {\n        android {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/build.gradle
+          if [ -f "android/settings.gradle.kts" ]; then
+            printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        extensions.configure<com.android.build.gradle.LibraryExtension> {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle.kts
+          elif [ -f "android/settings.gradle" ]; then
+            printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        android {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle
           fi
           sed -i 's|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">|' android/app/src/main/AndroidManifest.xml
           sed -i 's|android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"|android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion"|' android/app/src/main/AndroidManifest.xml
           sed -i 's/intl: \^0.19.0/intl: any/' pubspec.yaml
+          sed -i 's/file_picker: \^8.1.4/file_picker: any/' pubspec.yaml
           sed -i "1i import 'dart:ui';" lib/services/pdf_converter_service.dart
           sed -i "s|import 'package:pdf/pdf.dart';|import 'package:pdf/pdf.dart' hide PdfDocument;|" lib/services/pdf_converter_service.dart
           sed -i 's/backgroundColor: 0xFFFFFFFF/backgroundColor: Color(0xFFFFFFFF)/g' lib/services/pdf_converter_service.dart
