@@ -411,22 +411,39 @@ jobs:
               f.write_text(t, encoding="utf-8")
           '
 
-          if [ -f "android/settings.gradle.kts" ]; then
-            if ! grep -q "compileSdk = 36" android/settings.gradle.kts; then
-              printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        extensions.configure<com.android.build.gradle.LibraryExtension> {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle.kts
-            fi
-          elif [ -f "android/settings.gradle" ]; then
-            if ! grep -q "compileSdk = 36" android/settings.gradle; then
-              printf '\ngradle.beforeProject {\n    plugins.withId("com.android.library") {\n        android {\n            compileSdk = 36\n        }\n    }\n}\n' >> android/settings.gradle
-            fi
-          fi
+          # Completely clean android/build.gradle and write a safe Groovy block
+          cat << 'EOF' > android/build.gradle
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
 
-          python3 -c '
-          p = "android/build.gradle"
-          code = "\nsubprojects {\n    afterEvaluate { proj ->\n        if (proj.hasProperty(\"android\")) {\n            proj.android {\n                if (compileSdkVersion < 36) {\n                    compileSdk = 36\n                }\n            }\n        }\n    }\n}\n"
-          with open(p, "a", encoding="utf-8") as file:
-              file.write(code)
-          '
+          rootProject.buildDir = '../build'
+          subprojects {
+              project.buildDir = "${rootProject.buildDir}/${project.name}"
+          }
+          subprojects {
+              project.evaluationDependsOn(':app')
+          }
+
+          task clean(type: Delete) {
+              delete rootProject.buildDir
+          }
+
+          subprojects {
+              afterEvaluate { proj ->
+                  if (proj.hasProperty('android')) {
+                      proj.android {
+                          if (compileSdkVersion < 36) {
+                              compileSdk = 36
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
 
           chmod +x android/gradlew
 
