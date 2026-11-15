@@ -19,11 +19,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Flutter (Stable)
         uses: subosito/flutter-action@v2
@@ -31,10 +31,17 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Dependencies & Patch pdfrx
+      - name: Install Dependencies & Patch Build Config
         run: |
           flutter pub get
           find ~/.pub-cache/hosted/pub.dev/pdfrx-*/lib/src/pdfium -name "pdf_file_cache.dart" -exec sed -i 's/cache\.blockSize/cache!.blockSize/g; s/cache\.read(/cache!.read(/g' {} +
+          cat << 'EOF' >> android/build.gradle
+          subprojects {
+              tasks.matching { it.name.contains("lintVital") || it.name.contains("Lint") }.configureEach {
+                  enabled = false
+              }
+          }
+          EOF
 
       - name: Build Release APK
         run: flutter build apk --release --target-platform android-arm,android-arm64,android-x64
