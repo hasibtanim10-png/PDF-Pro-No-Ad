@@ -22,3 +22,15 @@ subprojects {
         }
     }
 }
+
+subprojects {
+    afterEvaluate { proj ->
+        if (proj.hasProperty("android")) {
+            proj.android {
+                if (compileSdkVersion < 36) {
+                    compileSdk = 36
+                }
+            }
+        }
+    }
+}
