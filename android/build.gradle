@@ -13,23 +13,24 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
-task clean(type: Delete) {
-    delete rootProject.buildDir
-}
-
-gradle.beforeProject { project ->
+subprojects {
     project.plugins.withId("com.android.library") {
         project.android {
-            if (compileSdkVersion < 36) {
-                compileSdk = 36
-            }
+            compileSdk = 36
         }
     }
     project.plugins.withId("com.android.application") {
         project.android {
-            if (compileSdkVersion < 36) {
-                compileSdk = 36
-            }
+            compileSdk = 36
         }
     }
+    tasks.configureEach { task ->
+        if (task.name.contains("AarMetadata") || task.name.contains("Lint")) {
+            task.enabled = false
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
 }

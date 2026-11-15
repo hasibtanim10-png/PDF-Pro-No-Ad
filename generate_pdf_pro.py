@@ -3389,7 +3389,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            ..Path == null
+            _selectedPdfPath == null
                     ? 'Select Source PDF'
                     : '${p.basename(_selectedPdfPath!)} ($_pdfTotalPages pages)',
               ),
