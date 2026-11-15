@@ -45,7 +45,6 @@ jobs:
         run: |
           python3 generate_pdf_pro.py
 
-          # Directly overwrite converter_screen.dart to eliminate any syntax glitch
           cat << 'EOF' > lib/screens/converter_screen.dart
           import 'dart:io';
           import 'package:file_picker/file_picker.dart';
@@ -422,7 +421,12 @@ jobs:
             fi
           fi
 
-          printf '\nsubprojects {\n    afterEvaluate {\ project ->\n        if (project.hasProperty("android")) {\n            project.android {\n                if (compileSdkVersion < 36) {\n                    compileSdk = 36\n                }\n            }\n        }\n    }\n}\n' >> android/build.gradle
+          python3 -c '
+          p = "android/build.gradle"
+          code = "\nsubprojects {\n    afterEvaluate { proj ->\n        if (proj.hasProperty(\"android\")) {\n            proj.android {\n                if (compileSdkVersion < 36) {\n                    compileSdk = 36\n                }\n            }\n        }\n    }\n}\n"
+          with open(p, "a", encoding="utf-8") as file:
+              file.write(code)
+          '
 
           chmod +x android/gradlew
 
