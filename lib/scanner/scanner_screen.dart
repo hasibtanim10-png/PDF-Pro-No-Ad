@@ -99,7 +99,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   Future<void> _importFromGallery() async {
-    final res = await FilePicker.pickFiles(
+    final res = await FilePicker.platform.pickFiles(
       type: FileType.image,
       allowMultiple: true,
     );

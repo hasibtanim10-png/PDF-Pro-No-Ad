@@ -171,7 +171,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
                     : '${p.basename(_selectedPdfPath!)} ($_pdfTotalPages pages)',
               ),
               onPressed: () async {
-                final res = await FilePicker.pickFiles(
+                final res = await FilePicker.platform.pickFiles(
                   type: FileType.custom,
                   allowedExtensions: ['pdf'],
                 );
@@ -208,7 +208,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
               icon: const Icon(Icons.add_photo_alternate),
               label: Text('Select Images (${_selectedImages.length} selected)'),
               onPressed: () async {
-                final res = await FilePicker.pickFiles(
+                final res = await FilePicker.platform.pickFiles(
                   type: FileType.image,
                   allowMultiple: true,
                 );
@@ -255,7 +255,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             onPressed: () async {
-              final dir = await FilePicker.getDirectoryPath();
+              final dir = await FilePicker.platform.getDirectoryPath();
               if (dir != null) setState(() => _customOutputFolder = dir);
             },
           ),

@@ -65,7 +65,7 @@ class FileManagerService {
   }
 
   Future<String?> authorizeNewFolder() async {
-    final selected = await FilePicker.getDirectoryPath(
+    final selected = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select PDF Folder',
     );
     if (selected == null || selected.isEmpty) return null;
@@ -79,7 +79,7 @@ class FileManagerService {
   }
 
   Future<void> importExternalPdfs() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf'],
       allowMultiple: true,
